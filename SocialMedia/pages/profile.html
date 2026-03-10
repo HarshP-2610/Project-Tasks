@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="User Profile — View posts, albums, photos, and details on SocialHub." />
+  <title>User Profile — SocialHub</title>
+
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="../style.css" />
+</head>
+
+<body>
+
+  <!-- Navbar -->
+  <div id="navbar-container"></div>
+
+  <!-- Loading -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading profile...</div>
+  </div>
+
+  <!-- ========== 3-Column Layout ========== -->
+  <div class="app-layout">
+
+    <!-- Left Sidebar -->
+    <aside class="sidebar-left" id="sidebar-left"></aside>
+
+    <!-- Center Content -->
+    <main class="feed-center">
+      <div class="profile-page" id="profilePage">
+
+        <!-- Back button -->
+        <a href="../index.html" class="btn-back" style="margin-bottom:1rem">
+          <i class="bi bi-arrow-left"></i> Back to Feed
+        </a>
+
+        <!-- Profile Header Card -->
+        <div id="profileHeader"></div>
+
+        <!-- Tabs -->
+        <div class="profile-tabs" id="profileTabs">
+          <button class="profile-tab active" data-tab="posts" onclick="switchTab('posts')">
+            <i class="bi bi-file-text"></i> Posts
+          </button>
+          <button class="profile-tab" data-tab="albums" onclick="switchTab('albums')">
+            <i class="bi bi-images"></i> Albums
+          </button>
+          <button class="profile-tab" data-tab="about" onclick="switchTab('about')">
+            <i class="bi bi-info-circle"></i> About
+          </button>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="tab-panel" id="tabPanel">
+          <div class="section-spinner">
+            <div class="spinner"></div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- Right Sidebar -->
+    <aside class="sidebar-right" id="sidebar-right"></aside>
+  </div>
+
+  <!-- ========== Comments Modal ========== -->
+  <div class="modal-overlay" id="commentsModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title" id="commentsModalTitle">
+          <i class="bi bi-chat-dots"></i> Comments
+        </div>
+        <button class="modal-close" onclick="closeCommentsModal()">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+      <div class="modal-body" id="commentsModalBody">
+        <div class="section-spinner">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Lightbox ========== -->
+  <div class="lightbox-overlay" id="lightboxOverlay" onclick="closeLightbox()">
+    <button class="lightbox-close" onclick="closeLightbox()">
+      <i class="bi bi-x-lg"></i>
+    </button>
+    <img class="lightbox-img" id="lightboxImg" src="" alt="" />
+    <div class="lightbox-title" id="lightboxTitle"></div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="../components/cards.js"></script>
+  <script src="../components/navbar.js"></script>
+  <script src="../components/sidebar.js"></script>
+  <script>
+    /**
+     * Profile Page Logic
+     *
+     * API Relationships:
+     *  users.id = posts.userId   → One user has many posts
+     *  users.id = albums.userId  → One user has many albums
+     *  posts.id = comments.postId → One post has many comments
+     *  albums.id = photos.albumId → One album has many photos
+     */
+
+    const API_BASE = 'https://jsonplaceholder.typicode.com';
+
+    // ---- State ----
+    let currentUser = null;
+    let userPosts = [];
+    let userAlbums = [];
+    let allComments = [];
+    let allUsers = [];
+    let currentTab = 'posts';
+
+    // ---- DOM ----
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const profileHeader = document.getElementById('profileHeader');
+    const tabPanel = document.getElementById('tabPanel');
+
+    // ---- Init ----
+    document.addEventListener('DOMContentLoaded', () => {
+      renderNavbar({ showSearch: false });
+      renderLeftSidebar('');
+
+      const params = new URLSearchParams(window.location.search);
+      const userId = parseInt(params.get('userId'));
+
+      if (!userId) {
+        document.getElementById('profilePage').innerHTML = `
+          <div class="empty-state" style="padding-top:4rem">
+            <i class="bi bi-exclamation-triangle"></i>
+            <p>No user specified. <a href="../index.html">Go back to feed</a>.</p>
+          </div>
+        `;
+        showLoading(false);
+        return;
+      }
+
+      loadProfile(userId);
+    });
+
+    // ============================================================
+    // Load Profile
+    // ============================================================
+    async function loadProfile(userId) {
+      try {
+        showLoading(true);
+
+        const [userRes, postsRes, albumsRes, commentsRes, usersRes] = await Promise.all([
+          fetch(`${API_BASE}/users/${userId}`),
+          fetch(`${API_BASE}/posts?userId=${userId}`),
+          fetch(`${API_BASE}/albums?userId=${userId}`),
+          fetch(`${API_BASE}/comments`),
+          fetch(`${API_BASE}/users`),
+        ]);
+
+        currentUser = await userRes.json();
+        userPosts = await postsRes.json();
+        userAlbums = await albumsRes.json();
+        allComments = await commentsRes.json();
+        allUsers = await usersRes.json();
+
+        document.title = `${currentUser.name} — SocialHub`;
+
+        renderProfileHeader();
+        switchTab('posts');
+        renderRightSidebar(allUsers.filter(u => u.id !== currentUser.id), []);
+
+        // Load trending photos for right sidebar
+        fetch(`${API_BASE}/photos?_limit=9`)
+          .then(r => r.json())
+          .then(photos => renderRightSidebar(allUsers.filter(u => u.id !== currentUser.id), photos));
+
+      } catch (error) {
+        console.error('Error loading profile:', error);
+        profileHeader.innerHTML = `
+          <div class="empty-state">
+            <i class="bi bi-exclamation-triangle"></i>
+            <p>Failed to load profile. <a href="../index.html">Go back</a>.</p>
+          </div>
+        `;
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // ============================================================
+    // Profile Header
+    // ============================================================
+    function renderProfileHeader() {
+      const u = currentUser;
+      profileHeader.innerHTML = `
+        <div class="profile-header-card">
+          <div class="profile-banner" style="background:${getGradient(u.id)}">
+            <div class="profile-avatar-wrapper">
+              <div class="profile-avatar" style="background:${getGradient(u.id)}">${getInitials(u.name)}</div>
+            </div>
+          </div>
+          <div class="profile-info">
+            <div class="profile-name">${u.name}</div>
+            <div class="profile-username">@${u.username}</div>
+            <div class="profile-bio">
+              ${u.company.catchPhrase} · Working at ${u.company.name}
+            </div>
+            <div class="profile-meta-row">
+              <span class="profile-meta-item"><i class="bi bi-envelope-fill"></i> ${u.email.toLowerCase()}</span>
+              <span class="profile-meta-item"><i class="bi bi-telephone-fill"></i> ${u.phone}</span>
+              <span class="profile-meta-item"><i class="bi bi-globe2"></i> ${u.website}</span>
+              <span class="profile-meta-item"><i class="bi bi-geo-alt-fill"></i> ${u.address.city}</span>
+            </div>
+            <div class="profile-stats-row">
+              <div class="stat-item">
+                <div class="stat-value">${userPosts.length}</div>
+                <div class="stat-label">Posts</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">${userAlbums.length}</div>
+                <div class="stat-label">Albums</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">${allComments.filter(c => userPosts.some(p => p.id === c.postId)).length}</div>
+                <div class="stat-label">Comments</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ============================================================
+    // Tab Switching
+    // ============================================================
+    function switchTab(tab) {
+      currentTab = tab;
+
+      // Update tab buttons
+      document.querySelectorAll('.profile-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+      });
+
+      // Render tab content
+      switch (tab) {
+        case 'posts': renderPosts(); break;
+        case 'albums': renderAlbums(); break;
+        case 'about': renderAbout(); break;
+      }
+    }
+
+    // ============================================================
+    // Posts Tab
+    // ============================================================
+    function renderPosts() {
+      if (userPosts.length === 0) {
+        tabPanel.innerHTML = `<div class="empty-state"><i class="bi bi-file-text"></i><p>No posts yet.</p></div>`;
+        return;
+      }
+
+      tabPanel.innerHTML = userPosts.map(post => {
+        const commentCount = allComments.filter(c => c.postId === post.id).length;
+        return createPostCard(post, commentCount, currentUser);
+      }).join('');
+    }
+
+    // ============================================================
+    // Albums Tab
+    // ============================================================
+    async function renderAlbums() {
+      if (userAlbums.length === 0) {
+        tabPanel.innerHTML = `<div class="empty-state"><i class="bi bi-images"></i><p>No albums yet.</p></div>`;
+        return;
+      }
+
+      tabPanel.innerHTML = `<div class="albums-grid" id="albumsGrid">
+        ${userAlbums.map(() => `<div class="skeleton" style="height:200px;border-radius:var(--radius-md)"></div>`).join('')}
+      </div>`;
+
+      // Fetch preview photos for each album
+      const photoPromises = userAlbums.map(album =>
+        fetch(`${API_BASE}/photos?albumId=${album.id}&_limit=4`)
+          .then(r => r.json())
+          .then(photos => ({ album, photos }))
+      );
+
+      const albumData = await Promise.all(photoPromises);
+
+      document.getElementById('albumsGrid').innerHTML = albumData.map(({ album, photos }) =>
+        createAlbumCard(album, photos)
+      ).join('');
+    }
+
+    // ============================================================
+    // Album Gallery
+    // ============================================================
+    async function openAlbumGallery(albumId, albumTitle) {
+      tabPanel.innerHTML = `
+        <div class="gallery-header">
+          <div>
+            <div class="gallery-title"><i class="bi bi-images" style="color:var(--primary)"></i> ${albumTitle}</div>
+            <div class="gallery-count" id="photoCount">Loading photos...</div>
+          </div>
+          <button class="btn-back-gallery" onclick="renderAlbums()">
+            <i class="bi bi-arrow-left"></i> Back to Albums
+          </button>
+        </div>
+        <div class="photo-gallery" id="photoGallery">
+          <div class="section-spinner" style="grid-column:1/-1"><div class="spinner"></div></div>
+        </div>
+      `;
+
+      try {
+        const response = await fetch(`${API_BASE}/photos?albumId=${albumId}`);
+        const photos = await response.json();
+
+        document.getElementById('photoCount').textContent = `${photos.length} photos`;
+        document.getElementById('photoGallery').innerHTML = photos.map(createPhotoItem).join('');
+      } catch {
+        document.getElementById('photoGallery').innerHTML = `
+          <div class="empty-state" style="grid-column:1/-1">
+            <i class="bi bi-exclamation-triangle"></i><p>Failed to load photos.</p>
+          </div>
+        `;
+      }
+    }
+
+    // ============================================================
+    // About Tab
+    // ============================================================
+    function renderAbout() {
+      const u = currentUser;
+      tabPanel.innerHTML = `
+        <div class="about-card animate-in">
+          <div class="about-card-title"><i class="bi bi-person-fill"></i> Personal Information</div>
+          <div class="about-item">
+            <span class="about-item-label">Full Name</span>
+            <span class="about-item-value">${u.name}</span>
+          </div>
+          <div class="about-item">
+            <span class="about-item-label">Username</span>
+            <span class="about-item-value">@${u.username}</span>
+          </div>
+          <div class="about-item">
+            <span class="about-item-label">Email</span>
+            <span class="about-item-value">${u.email.toLowerCase()}</span>
+          </div>
+          <div class="about-item">
+            <span class="about-item-label">Phone</span>
+            <span class="about-item-value">${u.phone}</span>
+          </div>
+          <div class="about-item">
+            <span class="about-item-label">Website</span>
+            <span class="about-item-value"><a href="https://${u.website}" target="_blank">${u.website}</a></span>
+          </div>
+        </div>
+
+        <div class="about-card animate-in" style="animation-delay:0.1s">
+          <div class="about-card-title"><i class="bi bi-geo-alt-fill"></i> Address</div>
+          <div class="about-item">
+            <span class="about-item-label">Street</span>
+            <span class="about-item-value">${u.address.street}</span>
+          </div>
+          <div class="about-item">
+            <span class="about-item-label">Suite</span>
+            <span class="about-item-value">${u.address.suite}</span>
+          </div>
+          <div class="about-item">
+            <span class="about-item-label">City</span>
+            <span class="about-item-value">${u.address.city}</span>
+          </div>
+          <div class="about-item">
+            <span class="about-item-label">Zipcode</span>
+            <span class="about-item-value">${u.address.zipcode}</span>
+          </div>
+          <div class="about-item">
+            <span class="about-item-label">Coordinates</span>
+            <span class="about-item-value">${u.address.geo.lat}, ${u.address.geo.lng}</span>
+          </div>
+        </div>
+
+        <div class="about-card animate-in" style="animation-delay:0.2s">
+          <div class="about-card-title"><i class="bi bi-building"></i> Company</div>
+          <div class="about-item">
+            <span class="about-item-label">Name</span>
+            <span class="about-item-value">${u.company.name}</span>
+          </div>
+          <div class="about-item">
+            <span class="about-item-label">Catch Phrase</span>
+            <span class="about-item-value">${u.company.catchPhrase}</span>
+          </div>
+          <div class="about-item">
+            <span class="about-item-label">Business</span>
+            <span class="about-item-value">${u.company.bs}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // ============================================================
+    // Comments Modal
+    // ============================================================
+    async function openComments(postId, postTitle) {
+      const overlay = document.getElementById('commentsModal');
+      const title = document.getElementById('commentsModalTitle');
+      const body = document.getElementById('commentsModalBody');
+
+      title.innerHTML = `<i class="bi bi-chat-dots"></i> ${postTitle}`;
+      body.innerHTML = `<div class="section-spinner"><div class="spinner"></div></div>`;
+      overlay.classList.add('active');
+      document.body.style.overflow = 'hidden';
+
+      try {
+        const response = await fetch(`${API_BASE}/comments?postId=${postId}`);
+        const comments = await response.json();
+
+        if (comments.length === 0) {
+          body.innerHTML = `<div class="empty-state"><i class="bi bi-chat"></i><p>No comments.</p></div>`;
+          return;
+        }
+        body.innerHTML = `<div style="padding:0.5rem 0">${comments.map(createCommentItem).join('')}</div>`;
+      } catch {
+        body.innerHTML = `<div class="empty-state"><i class="bi bi-exclamation-triangle"></i><p>Failed to load.</p></div>`;
+      }
+    }
+
+    function closeCommentsModal() {
+      document.getElementById('commentsModal').classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    document.getElementById('commentsModal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'commentsModal') closeCommentsModal();
+    });
+
+    // ============================================================
+    // Lightbox
+    // ============================================================
+    function openLightbox(url, title) {
+      document.getElementById('lightboxImg').src = url;
+      document.getElementById('lightboxImg').alt = title;
+      document.getElementById('lightboxTitle').textContent = title;
+      document.getElementById('lightboxOverlay').classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+      document.getElementById('lightboxOverlay').classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    // ============================================================
+    // Navigation helper
+    // ============================================================
+    function viewProfile(userId) {
+      window.location.href = `profile.html?userId=${userId}`;
+    }
+
+    // ============================================================
+    // Loading
+    // ============================================================
+    function showLoading(show) {
+      if (loadingOverlay) loadingOverlay.style.display = show ? 'flex' : 'none';
+    }
+  </script>
+</body>
+
+</html>
