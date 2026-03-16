@@ -1,59 +1,98 @@
-import { useState } from 'react';
+import { useState } from 'react'
 
 function App() {
-  const [formData, setFormData] = useState({
-    topics: '',
-    description: ''
-  });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    console.log('Form Submitted:', formData);
-    // Add your logic here
-  };
+  const [notes, setNotes] = useState("")
+  const [tasks, setTasks] = useState([])
+  const [heading, setHeading] = useState("")
+
+  function submitForm() {
+
+    let card = [...tasks]
+
+    card.push({
+      Title: heading,
+      Topics: notes
+    })
+
+    setTasks(card)
+
+    setNotes("")
+    setHeading("")
+    console.log(tasks)
+  }
 
   return (
     <>
-      <section className='flex items-center justify-center h-screen bg-gray-50'>
-        {/* Form Container */}
-        <div className='w-1/2 bg-red-100 h-screen flex flex-col items-center justify-center p-10'>
-          <h2 className="text-2xl font-bold mb-6 text-gray-800">Create New Entry</h2>
+      <section className='md:flex items-center justify-center'>
 
-          <form onSubmit={handleSubmit} className='w-full max-w-md flex flex-col gap-4'>
-            {/* 1. Textbox: Topics */}
+        {/* Add Task */}
+        <div className='md:w-1/2 bg-indigo-100 h-screen'>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              submitForm()
+            }}
+            className='h-[100vh] flex justify-center items-center flex-col gap-5'
+          >
+
+            <h2 className='font-bold text-3xl'>Create a Note</h2>
+
             <input
+              value={heading}
+              onChange={(e) => setHeading(e.target.value)}
               type="text"
-              placeholder='Topics....'
-              className='w-full h-12 px-4 rounded-lg border-2 border-gray-300 focus:border-blue-500 focus:outline-none'
-              value={formData.topics}
-              onChange={(e) => setFormData({ ...formData, topics: e.target.value })}
+              className='font-bold bg-white border w-90 border-emerald-700 px-4 py-2 outline-none text-emerald-700 rounded-md block'
+              placeholder='Heading'
             />
 
-            {/* 2. Textarea: Description */}
             <textarea
-              placeholder='Description....'
-              className='w-full h-32 p-4 rounded-lg border-2 border-gray-300 focus:border-blue-500 focus:outline-none resize-none'
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder='Topics...'
+              className='bg-white w-90 border border-emerald-700 px-6 py-2 outline-none text-emerald-700 rounded-md block'
             ></textarea>
 
-            {/* 3. Submit: Create Button */}
-            <button
+            <input
               type="submit"
-              className='w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-colors'
-            >
-              Create
-            </button>
+              value="Submit"
+              className='px-39 py-2 bg-cyan-300 rounded-sm'
+            />
+
           </form>
         </div>
 
-        {/* Right Side Preview/Empty Space */}
-        <div className='w-1/2 bg-green-100 h-screen border-l-2 border-white flex items-center justify-center'>
-          <p className="text-gray-500 italic">Preview or content will appear here.</p>
+        {/* create notes */}
+        <div className="md:w-1/2 bg-emerald-100 min-h-screen border-l-2 border-white p-6">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+
+            {tasks.map((task, index) => {
+              return (
+                <div
+                  key={index}
+                  className="w-full h-60 bg-white rounded-2xl p-4 shadow-xl relative flex flex-col"
+                >
+                  <img
+                    src="https://pngimg.com/d/pin_PNG76.png"
+                    alt=""
+                    className="h-10 absolute -top-4 left-1/2 -translate-x-1/2"
+                  />
+
+                  <div className="bg-yellow-400 rounded-xl p-4 h-full mt-4 overflow-hidden">
+                    <p className="text-xl font-semibold">{task.Title}</p>
+                    <p className="text-sm mt-2 break-words">{task.Topics}</p>
+                  </div>
+                </div>
+              )
+            })}
+
+          </div>
+
         </div>
       </section>
     </>
-  );
+  )
 }
 
-export default App;
+export default App
